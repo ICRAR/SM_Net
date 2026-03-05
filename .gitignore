@@ -1,0 +1,45 @@
+/scratch/
+/data/ProGeny/
+/repeat_count_csvs/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environments
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+*.iml
+# Runtime outputs
+lookup_out/
+*.log
+
+# Ignore big NPZs, but keep meta caches
+**/*.npz
+!**/*.meta.npz
+
+# OS / misc
+.DS_Store
+
+# Local secrets / configs (if you ever add them)
+*.env
+.env
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Do not commit raw weights
+models/*.pt
+
+# Do not commit raw weights
+models/*.pt
+
+# Model weights are hosted externally (Zenodo)
+models/*.pt
+models/*.zip
