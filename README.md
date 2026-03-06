@@ -111,3 +111,5 @@ python scripts/dash_lookup.py
 Then open:
 
 http://127.0.0.1:8050
+
+"Read me" button on the top right of dash interface provides a Quick Start guide. Refer to the paper for technical details.
