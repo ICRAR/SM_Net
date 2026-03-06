@@ -15,9 +15,9 @@ Weights are hosted on Zenodo and are downloaded automatically by the app when ne
 
 ## Hardware requirements
 
-- **NVIDIA GPU with at least 6 GB VRAM**
+- **NVIDIA GPU with at least 6 GB RAM** and latest driver
 - Internet access (for first-time model weight downloads)
-- Recommended RAM: 16 GB+
+- Recommended RAM: 32 GB+
 
 ---
 
