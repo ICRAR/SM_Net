@@ -43,3 +43,71 @@ Manual download is also possible:
 ```bash
 git clone https://github.com/ICRAR/SM_Net.git
 cd SM_Net
+```
+
+### 2) Create a Python environment (recommended)
+Option A — Windows (PowerShell)
+```bash
+cd SM_Net
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+```
+If PowerShell blocks activation, run this once (PowerShell as your user), then repeat the commands above:
+```bash
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
+Option B — Windows (Command Prompt)
+```bash
+cd SM_Net
+py -m venv .venv
+.\.venv\Scripts\activate.bat
+python -m pip install --upgrade pip
+```
+Option C — Linux (Ubuntu) / macOS (Terminal)
+```bash
+cd SM_Net
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+```
+### 3) Install NVIDIA driver + verify GPU
+
+Run this (Windows PowerShell or Linux Terminal):
+```bash
+nvidia-smi
+```
+You should see your GPU listed and a driver version.
+
+4) Install CUDA-enabled PyTorch (recommended)
+
+Do not rely on pip install torch if you need GPU support. Use the official PyTorch selector to generate the correct command for your OS + CUDA:
+
+https://pytorch.org/get-started/locally/
+
+Then run the command it gives you inside your activated .venv.
+
+### 5) Install the remaining Python packages
+
+After PyTorch is installed, run:
+```bash
+pip install -r requirements.txt
+```
+### 6) Verify PyTorch can see the GPU
+```bash
+python -c "import torch; print('CUDA available:', torch.cuda.is_available()); print('GPU:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)"
+```
+Expected:
+
+CUDA available: True
+
+GPU name printed
+
+### 7) Run the dashboard
+```bash
+python scripts/dash_lookup.py
+```
+
+Then open:
+
+http://127.0.0.1:8050
