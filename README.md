@@ -26,6 +26,7 @@ Weights are hosted on Zenodo and are downloaded automatically by the web app whe
 Weights are hosted on Zenodo:
 
 - **DOI:** 10.5281/zenodo.18883385
+- https://zenodo.org/records/18883385
 
 On first launch:
 - The app will download the **default model weights** automatically (if not already present).
