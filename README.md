@@ -30,7 +30,7 @@ Weights are hosted on Zenodo:
 
 On first launch:
 - The app will download the **default model weights** automatically (if not already present).
-- The download(s) may take some time as weights for each model are about 2.2 GB
+- The download(s) may take some time as weights for each model are above 2 GB in size.
 - If you select another model, the app will check if the weights exist in `models/`. If missing, it will ask whether you want to download them.
 
 Manual download is also possible:
