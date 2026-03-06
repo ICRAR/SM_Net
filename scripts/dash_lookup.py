@@ -28,6 +28,9 @@ import base64, io
 import pandas as pd
 from dash import dash_table
 from astropy.io import fits
+import urllib.request
+import urllib.error
+
 
 try:
     from dash import ctx
@@ -44,8 +47,10 @@ SOFTPLUS_BETA = 2.0
 
 EPS = 1e-2
 
-REPO_ROOT = Path(__file__).resolve().parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
 base_dir = REPO_ROOT
+
+print("base_dir:",base_dir)
 
 meta_dir = Path(base_dir) / "data/processed_libraries"
 model_dir = Path(base_dir) / "models"
@@ -100,6 +105,167 @@ MODEL_CONFIG = {
 }
 
 DEFAULT_MODEL_KEY = "TMAP-C3K-husser-OB-combined"
+
+
+# =========================
+# Weights download (direct .pt)
+# =========================
+
+ZENODO_RECORD_ID = "18883385"
+ZENODO_DOI = "10.5281/zenodo.18883385"
+
+def zenodo_file_url(filename: str) -> str:
+    return f"https://zenodo.org/records/{ZENODO_RECORD_ID}/files/{filename}?download=1"
+
+# All weight files you uploaded (filenames on Zenodo)
+# Map keys in MODEL_CONFIG -> filename
+MODEL_WEIGHTS_FILES: dict[str, str] = {
+    "PHOENIX-husser": "lookup_model_best_husser.pt",
+    "PHOENIX-allard": "lookup_model_best_allard.pt",
+    "C3K-conroy": "lookup_model_best_C3K.pt",
+    "TMAP-Werner": "lookup_model_best_TMAP.pt",
+    "OB-PoWR": "lookup_model_best_OB_PoWR.pt",
+    "TMAP-C3K-husser-combined": "lookup_model_TMAP_C3K_husser_combined.pt",
+    "TMAP-C3K-husser-OB-combined": "lookup_model_TMAP_C3K_husser_OB_combined.pt",  # default
+    # Note: you also listed lookup_model_C3K_husser_combined.pt, but it's not referenced by MODEL_CONFIG currently.
+}
+
+def weights_url_for(model_key: str) -> str | None:
+    fname = MODEL_WEIGHTS_FILES.get(model_key)
+    return zenodo_file_url(fname) if fname else None
+
+def _expected_weight_path(model_key: str) -> Path:
+    cfg = MODEL_CONFIG.get(model_key, MODEL_CONFIG[DEFAULT_MODEL_KEY])
+    return model_dir / cfg["model"]
+
+def _weights_present(model_key: str) -> bool:
+    return _expected_weight_path(model_key).is_file()
+
+class WeightsDownloadManager:
+    """
+    Downloads a single model weight file (.pt) with progress reporting.
+    Writes to a temp file then atomically renames to the final path.
+    """
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.active = False
+        self.model_key: str | None = None
+        self.status = "idle"     # idle|downloading|done|failed
+        self.msg = ""
+        self.progress = 0.0      # 0..100
+        self.bytes_done = 0
+        self.bytes_total = 0
+        self.last_error = ""
+        self.thread: threading.Thread | None = None
+
+    def start(self, model_key: str, url: str) -> bool:
+        with self.lock:
+            if self.active:
+                return False
+            self.active = True
+            self.model_key = model_key
+            self.status = "downloading"
+            label = MODEL_CONFIG.get(model_key, {}).get("label", model_key)
+            self.msg = f"Downloading weights for {label}…"
+            self.progress = 0.0
+            self.bytes_done = 0
+            self.bytes_total = 0
+            self.last_error = ""
+
+        def _run():
+            tmp_path = None
+            try:
+                model_dir.mkdir(parents=True, exist_ok=True)
+                OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+                dest = _expected_weight_path(model_key)
+                tmp_path = dest.with_suffix(dest.suffix + f".part_{uuid.uuid4().hex[:8]}")
+
+                print(f"[WEIGHTS] Downloading '{model_key}' → {dest}", flush=True)
+                print(f"[WEIGHTS] URL: {url}", flush=True)
+
+                req = urllib.request.Request(url, headers={"User-Agent": "SM-Net/1.0"})
+                with urllib.request.urlopen(req) as resp:
+                    total = resp.headers.get("Content-Length")
+                    total = int(total) if total and total.isdigit() else 0
+                    with self.lock:
+                        self.bytes_total = total
+
+                    chunk = 1024 * 1024  # 1 MiB
+                    done = 0
+                    t_last = time.time()
+
+                    with open(tmp_path, "wb") as f:
+                        while True:
+                            b = resp.read(chunk)
+                            if not b:
+                                break
+                            f.write(b)
+                            done += len(b)
+
+                            now = time.time()
+                            if now - t_last >= 0.2:
+                                with self.lock:
+                                    self.bytes_done = done
+                                    if self.bytes_total > 0:
+                                        self.progress = 100.0 * done / self.bytes_total
+                                t_last = now
+
+                    with self.lock:
+                        self.bytes_done = done
+                        if self.bytes_total > 0:
+                            self.progress = min(100.0, 100.0 * done / self.bytes_total)
+
+                # Atomic replace into final path
+                tmp_path.replace(dest)
+
+                if not dest.exists() or dest.stat().st_size == 0:
+                    raise IOError(f"Downloaded file is missing/empty: {dest}")
+
+                print(f"[WEIGHTS] Ready: {dest} ({dest.stat().st_size/1e9:.2f} GB)", flush=True)
+                with self.lock:
+                    self.status = "done"
+                    self.msg = f"Weights ready for {MODEL_CONFIG.get(model_key, {}).get('label', model_key)}."
+                    self.progress = 100.0
+
+            except Exception as e:
+                err = f"{type(e).__name__}: {e}"
+                print(f"[WEIGHTS][ERROR] {err}", flush=True)
+                with self.lock:
+                    self.status = "failed"
+                    self.last_error = err
+                    self.msg = f"Failed downloading weights for {model_key}: {err}"
+
+                # cleanup temp file on failure
+                if tmp_path is not None:
+                    try:
+                        if tmp_path.exists():
+                            tmp_path.unlink()
+                    except Exception:
+                        pass
+
+            finally:
+                with self.lock:
+                    self.active = False
+
+        self.thread = threading.Thread(target=_run, daemon=True)
+        self.thread.start()
+        return True
+
+    def snapshot(self) -> dict:
+        with self.lock:
+            return {
+                "active": self.active,
+                "model_key": self.model_key,
+                "status": self.status,
+                "msg": self.msg,
+                "progress": float(self.progress),
+                "bytes_done": int(self.bytes_done),
+                "bytes_total": int(self.bytes_total),
+                "last_error": self.last_error,
+            }
+
+WEIGHTS = WeightsDownloadManager()
 
 # Keep these for argparse defaults – they will be overridden at runtime
 npz_file = MODEL_CONFIG[DEFAULT_MODEL_KEY]["npz"]
@@ -1724,6 +1890,55 @@ model_selector = dbc.Card(
     className="mb-2",
 )
 
+weights_card = dbc.Card(
+    dbc.CardBody(
+        [
+            dbc.Row(
+                [
+                    dbc.Col(html.Div("Model weights", className="fw-bold"), md="auto"),
+                    dbc.Col(html.Div(id="weights-status-text", className="text-muted"), md=True),
+                    dbc.Col(
+                        dbc.Button("Open Zenodo DOI", id="open-zenodo", color="secondary", outline=True, size="sm"),
+                        md="auto",
+                    ),
+                ],
+                align="center",
+            ),
+            dbc.Progress(id="weights-progress", value=0, striped=True, animated=True, className="mt-2"),
+            dcc.Interval(id="weights-tick", interval=500, n_intervals=0),
+            dcc.Interval(id="startup-tick", interval=800, n_intervals=0, max_intervals=1),
+        ]
+    ),
+    className="mb-2",
+)
+
+weights_modal = dbc.Modal(
+    [
+        dbc.ModalHeader(dbc.ModalTitle("Download model weights?")),
+        dbc.ModalBody(
+            [
+                html.Div(id="weights-modal-body"),
+                html.Div(
+                    [
+                        html.Div("If you prefer manual download, use Zenodo DOI:", className="mt-2"),
+                        html.Code(ZENODO_DOI),
+                    ],
+                    className="small text-muted",
+                ),
+            ]
+        ),
+        dbc.ModalFooter(
+            [
+                dbc.Button("Download", id="weights-confirm", color="primary"),
+                dbc.Button("Cancel", id="weights-cancel", color="secondary", outline=True),
+            ]
+        ),
+    ],
+    id="weights-modal",
+    is_open=False,
+    backdrop="static",
+)
+
 mode_selector = dbc.Card(
     dbc.CardBody(
         dbc.Row(
@@ -2122,68 +2337,218 @@ csv_modal = dbc.Modal(
     is_open=False,
     backdrop="static",
 )
+
+# readme_modal = dbc.Modal(
+#     [
+#         dbc.ModalHeader(dbc.ModalTitle("SM-Net — Quick Start")),
+#         dbc.ModalBody(
+#             dbc.Stack(
+#                 [
+#                     html.P("Use this guide to run the model and download the spectra generated as a FITs file.", className="mb-2"),
+#                     html.H6("Model / Library", className="mt-2"),
+#                     html.Ul([
+#                         html.Li(["Default is ", html.B("PHOENIX - Husser"), ": choose a model / library as per your requirement. "]),
+#                         html.Li([html.B("HUSSER + C3K + TMAP (combined grid)")," has the maximum coverage across the grid parameters."]),
+#                     ]),
+#                     html.H6("Input modes", className="mt-2"),
+#                     html.Ul([
+#                         html.Li(["Default is ", html.B("Grid mode"), ": choose ranges and # samples for Teff, logG, logZ."]),
+#                         html.Li([
+#                             "For ", html.B("CSV mode"),
+#                             ": toggle the slider switch at top to the right, upload a CSV with columns ",
+#                             html.Code("teff, logg, logz"),
+#                             " (case-insensitive). A template CSV is available ",
+#                             html.A("here", href="/static/sample_star_track.csv", target="_blank"),
+#                             ".",
+#                         ]),
+#                     ]),
+#                     html.H6("Limits & validation"),
+#                     html.Ul([
+#                         html.Li("Parameter limits are taken from the selected model/library; out-of-range values are rejected and reported under the previews."),
+#                         html.Li("# samples per axis: 2–50. Errors will show under the previews."),
+#                     ]),
+#                     html.H6("Running inference"),
+#                     html.Ul([
+#                         html.Li("Click “Start Inference”. The live log will stream below."),
+#                         html.Li("Two preview plots (first/last label) appear when ready."),
+#                     ]),
+#                     html.H6("Downloads & cleanup"),
+#                     html.Ul([
+#                         html.Li("When complete, “Download FITS” activates."),
+#                         html.Li("Large downloads are streamed; progress is handled by your browser."),
+#                         html.Li("Artifacts (FITS + preview PNGs) are auto-deleted after a timeout; "
+#                                 "completed downloads are auto deleted immediately after download."),
+#                     ]),
+#                     html.H6("CSV tips"),
+#                     html.Ul([
+#                         html.Li("Header can be any case: teff/logg/logz; otherwise the parser scans triples per line."),
+#                         html.Li("Duplicates are dropped automatically."),
+#                     ]),
+#
+#                     # NEW SECTION — Show Parameter Grid
+#                     html.H6("Show Parameter Grid"),
+#                     html.Ul([
+#                         html.Li(["Click ", html.B("Show Parameter Grid"), " to open a popup with a 3D scatter of (Teff, logG, logZ)."]),
+#                         html.Li(["In ", html.B("Grid mode"), " it visualises the current ranges; "
+#                                                              "in ", html.B("CSV mode"), " it visualises the uploaded rows (if valid)."]),
+#                     ]),
+#
+#                     html.H6("Logs"),
+#                     html.Ul([
+#                         html.Li("Logs show details of process, along side errors (if any)."),
+#                         html.Li("Use “Download Log” to save a full snapshot."),
+#                     ]),
+#                     html.Hr(),
+#                     html.P("Questions? Check the logs for errors first; parameter bounds and counts are the most common culprits."),
+#                     html.P("Email: omar.anwar@uwa.edu.au"),
+#                 ],
+#                 gap=2,
+#             )
+#         ),
+#         dbc.ModalFooter(
+#             dbc.Button("Close", id="readme-close", color="primary", n_clicks=0)
+#         ),
+#     ],
+#     id="readme-modal",
+#     is_open=False,
+#     size="lg",
+#     scrollable=True,
+#     backdrop="static",
+# )
+
 readme_modal = dbc.Modal(
     [
         dbc.ModalHeader(dbc.ModalTitle("SM-Net — Quick Start")),
         dbc.ModalBody(
             dbc.Stack(
                 [
-                    html.P("Use this guide to run the model and download the spectra generated as a FITs file.", className="mb-2"),
+                    html.P(
+                        "This is a local Dash interface for generating synthetic spectra with SM-Net. "
+                        "Use the steps below to run inference and download outputs as FITS.",
+                        className="mb-2",
+                    ),
+
+                    html.H6("Model weights (required)"),
+                    html.Ul([
+                        html.Li([
+                            "Model weights are hosted on Zenodo (DOI: ",
+                            html.Code("10.5281/zenodo.18883385"),
+                            ")."
+                        ]),
+                        html.Li([
+                            "On first launch, the app will automatically download the ",
+                            html.B("default model"),
+                            " weights (if not already present). Download progress is shown in the UI and console logs."
+                        ]),
+                        html.Li([
+                            "When you select a different model, the app will check if its weights exist in ",
+                            html.Code("models/"),
+                            ". If missing, it will prompt you to download them."
+                        ]),
+                        html.Li([
+                            "Manual option: download the relevant ",
+                            html.Code(".pt"),
+                            " file(s) from Zenodo and place them in ",
+                            html.Code("models/"),
+                            "."
+                        ]),
+                    ]),
+
                     html.H6("Model / Library", className="mt-2"),
                     html.Ul([
-                        html.Li(["Default is ", html.B("PHOENIX - Husser"), ": choose a model / library as per your requirement. "]),
-                        html.Li([html.B("HUSSER + C3K + TMAP (combined grid)")," has the maximum coverage across the grid parameters."]),
+                        html.Li([
+                            "Choose a model/library based on your coverage requirements. "
+                            "The combined grids provide wider parameter coverage."
+                        ]),
+                        html.Li([
+                            html.B("Husser + C3K + TMAP + OB (combined grid)"),
+                            " provides the broadest coverage across (Teff, logG, logZ) for most use cases."
+                        ]),
                     ]),
+
                     html.H6("Input modes", className="mt-2"),
                     html.Ul([
-                        html.Li(["Default is ", html.B("Grid mode"), ": choose ranges and # samples for Teff, logG, logZ."]),
+                        html.Li([
+                            "Default is ", html.B("Grid mode"),
+                            ": choose ranges and number of samples for Teff, logG, logZ."
+                        ]),
                         html.Li([
                             "For ", html.B("CSV mode"),
-                            ": toggle the slider switch at top to the right, upload a CSV with columns ",
+                            ": toggle the switch at the top to the right, then upload a CSV with columns ",
                             html.Code("teff, logg, logz"),
                             " (case-insensitive). A template CSV is available ",
                             html.A("here", href="/static/sample_star_track.csv", target="_blank"),
                             ".",
                         ]),
                     ]),
+
                     html.H6("Limits & validation"),
                     html.Ul([
-                        html.Li("Parameter limits are taken from the selected model/library; out-of-range values are rejected and reported under the previews."),
+                        html.Li(
+                            "Parameter limits are taken from the selected model/library metadata. "
+                            "Out-of-range values are rejected and reported under the previews."
+                        ),
                         html.Li("# samples per axis: 2–50. Errors will show under the previews."),
                     ]),
+
                     html.H6("Running inference"),
                     html.Ul([
                         html.Li("Click “Start Inference”. The live log will stream below."),
                         html.Li("Two preview plots (first/last label) appear when ready."),
                     ]),
+
                     html.H6("Downloads & cleanup"),
                     html.Ul([
                         html.Li("When complete, “Download FITS” activates."),
                         html.Li("Large downloads are streamed; progress is handled by your browser."),
-                        html.Li("Artifacts (FITS + preview PNGs) are auto-deleted after a timeout; "
-                                "completed downloads are auto deleted immediately after download."),
+                        html.Li(
+                            "Artifacts (FITS + preview PNGs) may be auto-deleted after a timeout; "
+                            "completed downloads may be deleted immediately after download."
+                        ),
                     ]),
+
                     html.H6("CSV tips"),
                     html.Ul([
                         html.Li("Header can be any case: teff/logg/logz; otherwise the parser scans triples per line."),
                         html.Li("Duplicates are dropped automatically."),
                     ]),
 
-                    # NEW SECTION — Show Parameter Grid
                     html.H6("Show Parameter Grid"),
                     html.Ul([
-                        html.Li(["Click ", html.B("Show Parameter Grid"), " to open a popup with a 3D scatter of (Teff, logG, logZ)."]),
-                        html.Li(["In ", html.B("Grid mode"), " it visualises the current ranges; "
-                                                             "in ", html.B("CSV mode"), " it visualises the uploaded rows (if valid)."]),
+                        html.Li([
+                            "Click ", html.B("Show Parameter Grid"),
+                            " to open a popup with a 3D scatter of (Teff, logG, logZ)."
+                        ]),
+                        html.Li([
+                            "In ", html.B("Grid mode"),
+                            " it visualises the current ranges; in ", html.B("CSV mode"),
+                            " it visualises the uploaded rows (if valid)."
+                        ]),
+                    ]),
+
+                    html.H6("Project links"),
+                    html.Ul([
+                        html.Li([
+                            "Code repository: ",
+                            html.A("https://github.com/ICRAR/SM_Net", href="https://github.com/ICRAR/SM_Net", target="_blank"),
+                        ]),
+                        html.Li([
+                            "Weights (Zenodo): ",
+                            html.A("https://doi.org/10.5281/zenodo.18883385", href="https://doi.org/10.5281/zenodo.18883385", target="_blank"),
+                        ]),
                     ]),
 
                     html.H6("Logs"),
                     html.Ul([
-                        html.Li("Logs show details of process, along side errors (if any)."),
+                        html.Li("Logs show progress and errors (including download issues)."),
                         html.Li("Use “Download Log” to save a full snapshot."),
                     ]),
+
                     html.Hr(),
-                    html.P("Questions? Check the logs for errors first; parameter bounds and counts are the most common culprits."),
+                    html.P(
+                        "If something fails, check the logs first. Missing weights, out-of-range parameters, "
+                        "and oversized grids are the most common issues."
+                    ),
                     html.P("Email: omar.anwar@uwa.edu.au"),
                 ],
                 gap=2,
@@ -2199,8 +2564,6 @@ readme_modal = dbc.Modal(
     scrollable=True,
     backdrop="static",
 )
-
-
 
 app.layout = dbc.Container([
     dbc.Row(
@@ -2223,6 +2586,9 @@ app.layout = dbc.Container([
     # Mode selector card
     dbc.Row([dbc.Col(mode_selector, lg=12)], className="g-3"),
 
+    dbc.Row([dbc.Col(weights_card, lg=12)], className="g-3"),
+
+    weights_modal,
 
     dcc.Input(id="input-mode", value="grid", type="text", style={"display": "none"}),
 
@@ -2270,6 +2636,19 @@ app.layout = dbc.Container([
 
 app.clientside_callback(
     """
+    function(n){
+        if(!n){ return window.dash_clientside.no_update; }
+        window.open("https://doi.org/" + %s, "_blank");
+        return null;
+    }
+    """ % json.dumps(ZENODO_DOI),
+    Output("open-zenodo", "n_clicks"),
+    Input("open-zenodo", "n_clicks"),
+    prevent_initial_call=True,
+    )
+
+app.clientside_callback(
+    """
     function(logValue) {
         // Run after the textarea has received new value
         const el = document.getElementById('log-box');
@@ -2289,6 +2668,92 @@ app.clientside_callback(
     dash.Output("log-autoscroll-sentinel", "data"),
     dash.Input("log-box", "value"),
 )
+
+@app.callback(
+    Output("weights-status-text", "children"),
+    Output("weights-progress", "value"),
+    Output("weights-progress", "animated"),
+    Output("weights-progress", "striped"),
+    Input("weights-tick", "n_intervals"),
+)
+def update_weights_status(_n):
+    s = WEIGHTS.snapshot()
+    if s["status"] == "idle":
+        return "Idle.", 0, False, False
+    if s["status"] == "downloading":
+        done = s["bytes_done"]; total = s["bytes_total"]
+        if total > 0:
+            txt = f"{s['msg']}  ({done/1e6:.1f}/{total/1e6:.1f} MB)"
+        else:
+            txt = f"{s['msg']}  ({done/1e6:.1f} MB)"
+        return txt, s["progress"], True, True
+    if s["status"] == "done":
+        return s["msg"], 100, False, False
+    # failed
+    return s["msg"], 0, False, False
+
+
+@app.callback(
+    Output("weights-modal", "is_open"),
+    Output("weights-modal-body", "children"),
+    Input("startup-tick", "n_intervals"),
+    State("weights-modal", "is_open"),
+    prevent_initial_call=True,
+)
+def startup_auto_download(_n, is_open):
+    # Auto-start download of DEFAULT model on first run IF URL is configured and file missing.
+    mk = DEFAULT_MODEL_KEY
+    if _weights_present(mk):
+        return False, ""
+    url = weights_url_for(mk)
+    if not url:
+        # No URL yet: show a friendly note in UI, but do not block startup.
+        return True, (
+            f"Default weights are missing: {_expected_weight_path(mk).name}. "
+            f"Automatic download is not configured yet (URL not set)."
+        )
+    # start download immediately; no prompt for default
+    WEIGHTS.start(mk, url)
+    return False, ""
+
+@app.callback(
+    Output("weights-modal", "is_open", allow_duplicate=True),
+    Output("weights-modal-body", "children", allow_duplicate=True),
+    Input("model-select", "value"),
+    State("weights-modal", "is_open"),
+    prevent_initial_call=True,
+)
+def on_model_change_prompt(selected_model, is_open):
+    mk = selected_model or DEFAULT_MODEL_KEY
+    if _weights_present(mk):
+        return False, ""
+    url = weights_url_for(mk)
+    label = MODEL_CONFIG.get(mk, {}).get("label", mk)
+    fname = _expected_weight_path(mk).name
+
+    if not url:
+        return True, f"Weights for '{label}' are not present ({fname}). Automatic download is not configured yet."
+    return True, f"Weights for '{label}' are missing ({fname}). Download now?"
+
+@app.callback(
+    Output("weights-modal", "is_open", allow_duplicate=True),
+    Input("weights-confirm", "n_clicks"),
+    Input("weights-cancel", "n_clicks"),
+    State("model-select", "value"),
+    prevent_initial_call=True,
+)
+def handle_weights_modal(n_yes, n_no, selected_model):
+    trig = ctx.triggered_id
+    if trig == "weights-cancel":
+        return False
+    mk = selected_model or DEFAULT_MODEL_KEY
+    if _weights_present(mk):
+        return False
+    url = weights_url_for(mk)
+    if url:
+        WEIGHTS.start(mk, url)
+    return False
+
 @app.callback(
     Output("grid3d-modal", "is_open"),
     Output("grid3d-graph", "figure"),
@@ -2723,6 +3188,34 @@ def driver(n_go, n_tick, n_clear,
         model_path = model_dir / cfg["model"]
         npz_path = meta_dir / cfg["npz"]
         meta_cache_path = meta_dir / cfg["meta"]
+
+        # ---- Weights presence guard ----
+        if not model_path.exists():
+            # If URL is known, prompt user; otherwise instruct manual download
+            url = weights_url_for(model_key)
+            if url:
+                # Start download automatically for default; otherwise open modal handled by model-select
+                WEIGHTS.start(model_key, url) if (model_key == DEFAULT_MODEL_KEY) else None
+                return (
+                    f"Weights missing for '{MODEL_CONFIG[model_key]['label']}'. Download in progress…",
+                    False, log_out,
+                    True, True,
+                    no_update, no_update,
+                    plot_first_style, plot_last_style,
+                    "", "",
+                    href_target, href_style
+                )
+            else:
+                return (
+                    f"Missing weights file: {model_path.name}. "
+                    f"Download from Zenodo (DOI {ZENODO_DOI}) and place it in {model_dir}/",
+                    False, log_out,
+                    True, True,
+                    no_update, no_update,
+                    plot_first_style, plot_last_style,
+                    "", "",
+                    href_target, href_style
+                )
         # # Normalize mode
         # mode = (input_mode or "grid").strip().lower()
         # is_csv_mode = (mode == "csv")
