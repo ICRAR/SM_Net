@@ -9,7 +9,7 @@ This repository contains:
 - A sample CSV (`sample_star_track.csv`)
 
 **Model weights are NOT stored in this GitHub repo.**  
-Weights are hosted on Zenodo and are downloaded automatically by the app when needed.
+Weights are hosted on Zenodo and are downloaded automatically by the web app when needed.
 
 ---
 
