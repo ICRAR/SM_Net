@@ -98,7 +98,7 @@ Package: Pip
 Language: Python
 
 Compute Platform: CUDA (pick the one compatible with your Nvidia driver version, see the link below)
-https://docs.nvidia.com/deploy/cuda-compatibility/minor-version-compatibility.html)
+https://docs.nvidia.com/deploy/cuda-compatibility/minor-version-compatibility.html
 
 Copy the command PyTorch gives you and run it inside your activated .venv.
 
@@ -127,6 +127,6 @@ Then open:
 
 http://127.0.0.1:8050
 
-On first launch, the app may start downloading the default model weights automatically (this can take time depending on your internet connection).
+On first launch, the app should start downloading the default model weights automatically (this can take time depending on your internet connection).
 
 The “Read me” button on the top right of the dashboard provides an in-app Quick Start guide. Refer to the paper for technical details.
