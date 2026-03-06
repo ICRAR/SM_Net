@@ -1,7 +1,6 @@
 numpy
 pandas
 matplotlib
-torch
 dash
 dash-bootstrap-components
 plotly
