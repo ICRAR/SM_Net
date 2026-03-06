@@ -15,7 +15,7 @@ Weights are hosted on Zenodo and are downloaded automatically by the app when ne
 
 ## Hardware requirements
 
-- **NVIDIA GPU with at least 6 GB RAM** and latest Nvidia driver
+- **NVIDIA GPU with at least 6 GB of GPU Memory** and latest Nvidia driver
 - Internet access (for first-time model weight downloads)
 - Recommended RAM: 32 GB+
 
@@ -29,6 +29,7 @@ Weights are hosted on Zenodo:
 
 On first launch:
 - The app will download the **default model weights** automatically (if not already present).
+- The download(s) may take some time as weights for each model are about 2.2 GB
 - If you select another model, the app will check if the weights exist in `models/`. If missing, it will ask whether you want to download them.
 
 Manual download is also possible:
@@ -47,26 +48,23 @@ cd SM_Net
 
 ### 2) Create a Python environment (recommended)
 Option A — Windows (PowerShell)
-```bash
-cd SM_Net
+```powershell
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 ```
 If PowerShell blocks activation, run this once (PowerShell as your user), then repeat the commands above:
-```bash
+```powershell
 Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 ```
 Option B — Windows (Command Prompt)
-```bash
-cd SM_Net
+```bat
 py -m venv .venv
 .\.venv\Scripts\activate.bat
 python -m pip install --upgrade pip
 ```
 Option C — Linux (Ubuntu) / macOS (Terminal)
 ```bash
-cd SM_Net
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
@@ -78,6 +76,7 @@ Run this (Windows PowerShell or Linux Terminal):
 nvidia-smi
 ```
 You should see your GPU listed and a driver version.
+If nvidia-smi is not found, your NVIDIA driver is not installed correctly (or you need to reboot after installing it).
 
 ### 4) Install CUDA-enabled PyTorch (recommended)
 
@@ -86,6 +85,16 @@ Do not rely on pip install torch if you need GPU support. Use the official PyTor
 https://pytorch.org/get-started/locally/
 
 Then run the command it gives you inside your activated .venv.
+
+In the selector choose:
+
+Package: Pip
+
+Language: Python
+
+Compute Platform: CUDA (pick the latest offered)
+
+Copy the command PyTorch gives you and run it inside your activated .venv.
 
 ### 5) Install the remaining Python packages
 
@@ -112,4 +121,6 @@ Then open:
 
 http://127.0.0.1:8050
 
-"Read me" button on the top right of dash interface provides a Quick Start guide. Refer to the paper for technical details.
+On first launch, the app may start downloading the default model weights automatically (this can take time depending on your internet connection).
+
+The “Read me” button on the top right of the dashboard provides an in-app Quick Start guide. Refer to the paper for technical details.
