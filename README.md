@@ -79,7 +79,7 @@ nvidia-smi
 ```
 You should see your GPU listed and a driver version.
 
-4) Install CUDA-enabled PyTorch (recommended)
+### 4) Install CUDA-enabled PyTorch (recommended)
 
 Do not rely on pip install torch if you need GPU support. Use the official PyTorch selector to generate the correct command for your OS + CUDA:
 
