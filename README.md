@@ -88,11 +88,15 @@ Then run the command it gives you inside your activated .venv.
 
 In the selector choose:
 
+PyTorch Build: Stable
+
+Your OS: whichever is applicable
+
 Package: Pip
 
 Language: Python
 
-Compute Platform: CUDA (pick the latest offered)
+Compute Platform: CUDA (pick the one compatible with Nvidia driver https://docs.nvidia.com/deploy/cuda-compatibility/minor-version-compatibility.html)
 
 Copy the command PyTorch gives you and run it inside your activated .venv.
 
