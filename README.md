@@ -96,7 +96,8 @@ Package: Pip
 
 Language: Python
 
-Compute Platform: CUDA (pick the one compatible with Nvidia driver https://docs.nvidia.com/deploy/cuda-compatibility/minor-version-compatibility.html)
+Compute Platform: CUDA (pick the one compatible with your Nvidia driver version, see the link below)
+https://docs.nvidia.com/deploy/cuda-compatibility/minor-version-compatibility.html)
 
 Copy the command PyTorch gives you and run it inside your activated .venv.
 
