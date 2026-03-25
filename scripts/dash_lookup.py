@@ -533,7 +533,7 @@ def _make_grid3d_figure(
 
     # --- Bigger marker sizes (also enlarges legend circles) ---
     # previously: sizes = np.clip(3 + np.log1p(counts), 3, 11)
-    sizes = np.clip(4 + 1.25 * np.log1p(counts), 4, 16)
+    sizes = np.clip(6 + 1.5 * np.log1p(counts), 6, 20)
 
     #print("model_key: ",model_key)
 
@@ -823,7 +823,8 @@ def _make_grid3d_figure(
             yanchor="bottom",
             bgcolor="rgba(255,255,255,0.85)",  # optional: cleaner visibility
             bordercolor="rgba(0,0,0,0.3)",
-            borderwidth=1
+            borderwidth=1,
+            font=dict(size=16),
         ),
         template="plotly_white",
         height=1000,
@@ -832,9 +833,21 @@ def _make_grid3d_figure(
     )
 
     fig.update_scenes(
-        xaxis_title="log Teff(K)",
-        yaxis_title="log g (cgs)",
-        zaxis_title="log Z",
+        xaxis=dict(
+            title="log Teff(K)",
+            title_font=dict(size=20),   # <- axis title size
+            tickfont=dict(size=16),     # <- tick label size
+        ),
+        yaxis=dict(
+            title="log g (cgs)",
+            title_font=dict(size=20),
+            tickfont=dict(size=16),
+        ),
+        zaxis=dict(
+            title="log Z",
+            title_font=dict(size=20),
+            tickfont=dict(size=16),
+        ),
         camera=dict(eye=dict(x=1.6, y=1.6, z=1.2)),
     )
     return fig, int(agg["count"].sum()), int(len(agg))
