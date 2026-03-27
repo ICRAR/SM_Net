@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 
-
+#  Copyright (c) 2026.
+#  ICRAR - International Centre for Radio Astronomy Research
+#  (c) UWA - The University of Western Australia, 2026
+#  Copyright by UWA (in the framework of the ICRAR)
+#  All rights reserved
 #
 #
 #  This library is free software; you can redistribute it and/or
