@@ -130,3 +130,9 @@ http://127.0.0.1:8050
 On first launch, the app should start downloading the default model weights automatically (this can take time depending on your internet connection).
 
 The “Read me” button on the top right of the dashboard provides an in-app Quick Start guide. Refer to the paper for technical details.
+
+## Dashboard preview
+
+<p align="center">
+  <img src="interface.png" alt="SM-Net Local Dashboard interface" width="900">
+</p>
