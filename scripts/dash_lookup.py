@@ -857,7 +857,7 @@ def _make_grid3d_figure(
 
     fig.update_scenes(
         xaxis=dict(
-            title="log Teff(K)",
+            title="log (Teff/K)",
             title_font=dict(size=20),   # <- axis title size
             tickfont=dict(size=16),     # <- tick label size
         ),
