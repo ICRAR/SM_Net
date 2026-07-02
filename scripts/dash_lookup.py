@@ -53,7 +53,7 @@ from dash import dash_table
 from astropy.io import fits
 import urllib.request
 import urllib.error
-
+import logging
 
 try:
     from dash import ctx
@@ -3683,4 +3683,10 @@ if __name__ == "__main__":
     print(f"Office network: http://{lan_ip}:{port}")
     _janitor = threading.Thread(target=_filesystem_janitor_loop, daemon=True)
     _janitor.start()
-    app.run(debug=False, host=host, port=port)
+    logging.getLogger("werkzeug").setLevel(logging.WARNING)
+    app.run(
+        debug=False,
+        host=host,
+        port=port,
+        dev_tools_silence_routes_logging=True,
+    )
