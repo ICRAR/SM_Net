@@ -1945,7 +1945,7 @@ weights_card = dbc.Card(
                 align="center",
             ),
             dbc.Progress(id="weights-progress", value=0, striped=True, animated=True, className="mt-2"),
-            dcc.Interval(id="weights-tick", interval=500, n_intervals=0),
+            dcc.Interval(id="weights-tick", interval=1000, n_intervals=0),
             dcc.Interval(id="startup-tick", interval=800, n_intervals=0, max_intervals=1),
         ]
     ),
