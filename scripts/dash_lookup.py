@@ -1872,8 +1872,12 @@ RUN = RunManager()
 # =========================
 # Dash UI
 # =========================
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.LITERA])
-app.title = "Inference (Dash, live logs)"
+app = dash.Dash(
+    __name__,
+    external_stylesheets=[dbc.themes.LITERA],
+    title="SM-Net",
+    update_title=None,
+)
 
 server = app.server
 
