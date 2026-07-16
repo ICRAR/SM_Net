@@ -134,8 +134,8 @@ DEFAULT_MODEL_KEY = "TMAP-C3K-husser-OB-combined"
 # Weights download (direct .pt)
 # =========================
 
-ZENODO_RECORD_ID = "18883385"
-ZENODO_DOI = "10.5281/zenodo.18883385"
+ZENODO_RECORD_ID = "21390345"
+ZENODO_DOI = "10.5281/zenodo.21390345"
 
 def zenodo_file_url(filename: str) -> str:
     return f"https://zenodo.org/records/{ZENODO_RECORD_ID}/files/{filename}?download=1"
