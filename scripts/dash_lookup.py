@@ -122,7 +122,7 @@ MODEL_CONFIG = {
     "TMAP-C3K-husser-OB-combined": {
         "label": "Husser + C3K + TMAP + OB (combined grid)",
         "npz": "phoenix_husser_c3k_tmap_OB_all.npz",
-        "model": "lookup_model_TMAP_C3K_husser_OB_combined.pt",
+        "model": "lookup_model_TMAP_C3K_husser_OB_combined_refined.pt",
         "meta": "phoenix_husser_c3k_tmap_OB_all.meta.npz",
     },
 }
@@ -149,8 +149,7 @@ MODEL_WEIGHTS_FILES: dict[str, str] = {
     "TMAP-Werner": "lookup_model_best_TMAP.pt",
     "OB-PoWR": "lookup_model_best_OB_PoWR.pt",
     "TMAP-C3K-husser-combined": "lookup_model_TMAP_C3K_husser_combined.pt",
-    "TMAP-C3K-husser-OB-combined": "lookup_model_TMAP_C3K_husser_OB_combined.pt",  # default
-    # Note: you also listed lookup_model_C3K_husser_combined.pt, but it's not referenced by MODEL_CONFIG currently.
+    "TMAP-C3K-husser-OB-combined": "lookup_model_TMAP_C3K_husser_OB_combined_refined.pt",  # default
 }
 
 def weights_url_for(model_key: str) -> str | None:
